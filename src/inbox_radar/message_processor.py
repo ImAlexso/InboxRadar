@@ -61,10 +61,10 @@ def _sender_fields(
         or {}
     )
 
-    sender_name = sender.get("name") or ""
-    sender_address = sender.get("address") or ""
-
-    return sender_name, sender_address
+    return (
+        sender.get("name") or "",
+        sender.get("address") or "",
+    )
 
 
 def process_message_event(
@@ -81,6 +81,12 @@ def process_message_event(
         if tracked_message is None:
             return "IGNORED_REMOVED"
 
+        if (
+            tracked_message["mailbox_status"]
+            == "REMOVED_FROM_INBOX"
+        ):
+            return "IGNORED_DUPLICATE_REMOVED"
+
         update_tracked_message_mailbox_status(
             message_id=message_id,
             mailbox_status="REMOVED_FROM_INBOX",
@@ -89,21 +95,39 @@ def process_message_event(
         return "REMOVED_TRACKED"
 
     if tracked_message is not None:
-        update_tracked_message_mailbox_status(
-            message_id=message_id,
-            mailbox_status="IN_INBOX",
-        )
+        restored_to_inbox = False
+
+        if tracked_message["mailbox_status"] != "IN_INBOX":
+            update_tracked_message_mailbox_status(
+                message_id=message_id,
+                mailbox_status="IN_INBOX",
+            )
+
+            restored_to_inbox = True
 
         if (
             "isRead" in event
             and isinstance(event["isRead"], bool)
         ):
-            update_tracked_message_read_state(
-                message_id=message_id,
-                is_read=event["isRead"],
+            current_is_read = bool(
+                tracked_message["is_read"]
             )
 
-            return "UPDATED_READ_STATE"
+            if current_is_read != event["isRead"]:
+                update_tracked_message_read_state(
+                    message_id=message_id,
+                    is_read=event["isRead"],
+                )
+
+                return "UPDATED_READ_STATE"
+
+            if restored_to_inbox:
+                return "RESTORED_TO_INBOX"
+
+            return "IGNORED_DUPLICATE_STATE"
+
+        if restored_to_inbox:
+            return "RESTORED_TO_INBOX"
 
         return "IGNORED_TRACKED_NO_SUPPORTED_CHANGES"
 

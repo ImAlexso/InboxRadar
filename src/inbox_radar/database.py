@@ -228,3 +228,118 @@ def update_tracked_message_mailbox_status(
         connection.commit()
 
         return cursor.rowcount > 0
+
+
+def _unprotect_database_text(
+    value: object,
+) -> str | None:
+    if value is None:
+        return None
+
+    return unprotect_text(bytes(value))
+
+
+def list_pending_messages() -> list[dict[str, object]]:
+    with closing(connect()) as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM tracked_messages
+            WHERE attention_status = 'PENDING'
+            ORDER BY created_at DESC
+            """
+        ).fetchall()
+
+    pending_messages: list[dict[str, object]] = []
+
+    for row in rows:
+        pending_messages.append(
+            {
+                "message_key": row["message_key"],
+                "subject": _unprotect_database_text(
+                    row["subject_protected"]
+                ),
+                "sender_name": _unprotect_database_text(
+                    row["sender_name_protected"]
+                ),
+                "sender_address": _unprotect_database_text(
+                    row["sender_address_protected"]
+                ),
+                "received_at": _unprotect_database_text(
+                    row["received_at_protected"]
+                ),
+                "web_link": _unprotect_database_text(
+                    row["web_link_protected"]
+                ),
+                "is_read": bool(row["is_read"]),
+                "classification": row["classification"],
+                "attention_status": row["attention_status"],
+                "mailbox_status": row["mailbox_status"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+        )
+
+    return pending_messages
+
+
+def count_pending_messages() -> int:
+    with closing(connect()) as connection:
+        row = connection.execute(
+            """
+            SELECT COUNT(*) AS total
+            FROM tracked_messages
+            WHERE attention_status = 'PENDING'
+            """
+        ).fetchone()
+
+    return int(row["total"])
+
+
+def _update_attention_status(
+    message_key: str,
+    attention_status: str,
+) -> bool:
+    allowed_statuses = {
+        "PENDING",
+        "MANAGED",
+        "IGNORED",
+    }
+
+    if attention_status not in allowed_statuses:
+        raise ValueError(
+            f"Unsupported attention status: {attention_status}"
+        )
+
+    with closing(connect()) as connection:
+        cursor = connection.execute(
+            """
+            UPDATE tracked_messages
+            SET
+                attention_status = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE message_key = ?
+            """,
+            (
+                attention_status,
+                message_key,
+            ),
+        )
+
+        connection.commit()
+
+        return cursor.rowcount > 0
+
+
+def mark_message_managed(message_key: str) -> bool:
+    return _update_attention_status(
+        message_key=message_key,
+        attention_status="MANAGED",
+    )
+
+
+def mark_message_ignored(message_key: str) -> bool:
+    return _update_attention_status(
+        message_key=message_key,
+        attention_status="IGNORED",
+    )
