@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
@@ -10,7 +10,7 @@ from .errors import AuthenticationError
 from .paths import app_data_dir
 
 
-SCOPES = ["Mail.Read"]
+SCOPES = ["Mail.ReadBasic"]
 
 
 class AuthService:
@@ -44,9 +44,16 @@ class AuthService:
             )
 
         access_token = result.get("access_token") if result else None
+
         if access_token:
             return str(access_token)
 
         error = (result or {}).get("error", "unknown_error")
-        description = (result or {}).get("error_description", "Sin detalle adicional")
-        raise AuthenticationError(f"Autenticación fallida: {error}: {description}")
+        description = (result or {}).get(
+            "error_description",
+            "No additional detail",
+        )
+
+        raise AuthenticationError(
+            f"Authentication failed: {error}: {description}"
+        )

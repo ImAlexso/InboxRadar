@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
@@ -10,6 +10,7 @@ from .errors import GraphApiError
 
 GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
 IMMUTABLE_ID_HEADER = 'IdType="ImmutableId"'
+DELTA_SELECT = "id,subject,receivedDateTime,from,isRead,webLink"
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,38 +37,28 @@ class GraphClient:
         *,
         params: dict[str, str | int] | None = None,
     ) -> dict[str, Any]:
-        response = self._session.get(url, params=params, timeout=30)
+        response = self._session.get(
+            url,
+            params=params,
+            timeout=30,
+        )
 
         if response.status_code >= 400:
-            try:
-                detail = response.json()
-            except ValueError:
-                detail = response.text
             raise GraphApiError(
-                f"Graph devolvió HTTP {response.status_code}: {detail}"
+                f"Graph request failed with HTTP {response.status_code}."
             )
 
         return response.json()
-
-    def list_recent_messages(self, top: int = 5) -> list[dict[str, Any]]:
-        data = self._get(
-            f"{GRAPH_ROOT}/me/mailFolders/inbox/messages",
-            params={
-                "$select": "id,subject,receivedDateTime,from,bodyPreview,isRead,webLink",
-                "$orderby": "receivedDateTime desc",
-                "$top": top,
-            },
-        )
-        return list(data.get("value", []))
 
     def start_delta(self, received_from_utc: str) -> DeltaPage:
         data = self._get(
             f"{GRAPH_ROOT}/me/mailFolders/inbox/messages/delta",
             params={
-                "$select": "id,subject,receivedDateTime,from,bodyPreview,isRead,webLink",
+                "$select": DELTA_SELECT,
                 "$filter": f"receivedDateTime ge {received_from_utc}",
             },
         )
+
         return self._to_delta_page(data)
 
     def follow_delta_link(self, url: str) -> DeltaPage:
