@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import json
 
 from datetime import UTC, datetime
 from typing import Any
 
 from .auth import AuthService
 from .config import load_settings
+from .database import initialize_database
 from .delta_state import load_delta_link, save_delta_link
 from .errors import InboxRadarError
 from .graph import GraphClient
+from .message_processor import process_message_event
 
 
 def _sender_name(message: dict[str, Any]) -> str:
@@ -53,6 +54,7 @@ def _drain_delta(client: GraphClient, first_page) -> tuple[list[dict[str, Any]],
 
 
 def run() -> None:
+    initialize_database()
     settings = load_settings()
     token = AuthService(settings).get_access_token()
     client = GraphClient(token)
@@ -77,16 +79,20 @@ def run() -> None:
     print("\n[2/2] Consultando cambios desde el último cursor...")
     first_page = client.follow_delta_link(saved_link)
     changes, delta_link = _drain_delta(client, first_page)
-    save_delta_link(delta_link)
 
     if not changes:
+        save_delta_link(delta_link)
         print("Sin cambios desde la última ejecución.")
         return
 
     print(f"Cambios detectados: {len(changes)}")
     for message in changes:
-        print(json.dumps(message, indent=2, ensure_ascii=False))
+        result = process_message_event(message)
+        print(f"- {result}: {message.get('id', '<sin id>')}")
         _print_message(message)
+
+    save_delta_link(delta_link)
+
 
 
 def main() -> None:
