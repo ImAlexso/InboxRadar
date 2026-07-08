@@ -8,13 +8,17 @@ from .delta_state import load_delta_link, save_delta_link
 from .errors import InboxRadarError
 from .graph import DeltaPage, GraphClient
 from .message_processor import process_message_event
-from .windows_protection import build_message_ref
+from .windows_protection import (
+    build_message_key,
+    build_message_ref,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class ProcessedEvent:
     result: str
     message_ref: str
+    message_key: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,13 +85,22 @@ def sync_once(client: GraphClient) -> SyncReport:
 
     for message in changes:
         result = process_message_event(message)
+        message_id = message.get("id")
+
+        message_key = (
+            build_message_key(message_id)
+            if isinstance(message_id, str)
+            and message_id
+            else None
+        )
 
         processed_events.append(
             ProcessedEvent(
                 result=result,
                 message_ref=build_message_ref(
-                    message.get("id")
+                    message_id
                 ),
+                message_key=message_key,
             )
         )
 

@@ -239,6 +239,55 @@ def _unprotect_database_text(
     return unprotect_text(bytes(value))
 
 
+def _pending_message_from_row(
+    row: sqlite3.Row,
+) -> dict[str, object]:
+    return {
+        "message_key": row["message_key"],
+        "subject": _unprotect_database_text(
+            row["subject_protected"]
+        ),
+        "sender_name": _unprotect_database_text(
+            row["sender_name_protected"]
+        ),
+        "sender_address": _unprotect_database_text(
+            row["sender_address_protected"]
+        ),
+        "received_at": _unprotect_database_text(
+            row["received_at_protected"]
+        ),
+        "web_link": _unprotect_database_text(
+            row["web_link_protected"]
+        ),
+        "is_read": bool(row["is_read"]),
+        "classification": row["classification"],
+        "attention_status": row["attention_status"],
+        "mailbox_status": row["mailbox_status"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def get_pending_message(
+    message_key: str,
+) -> dict[str, object] | None:
+    with closing(connect()) as connection:
+        row = connection.execute(
+            """
+            SELECT *
+            FROM tracked_messages
+            WHERE message_key = ?
+              AND attention_status = 'PENDING'
+            """,
+            (message_key,),
+        ).fetchone()
+
+    if row is None:
+        return None
+
+    return _pending_message_from_row(row)
+
+
 def list_pending_messages() -> list[dict[str, object]]:
     with closing(connect()) as connection:
         rows = connection.execute(
@@ -250,37 +299,10 @@ def list_pending_messages() -> list[dict[str, object]]:
             """
         ).fetchall()
 
-    pending_messages: list[dict[str, object]] = []
-
-    for row in rows:
-        pending_messages.append(
-            {
-                "message_key": row["message_key"],
-                "subject": _unprotect_database_text(
-                    row["subject_protected"]
-                ),
-                "sender_name": _unprotect_database_text(
-                    row["sender_name_protected"]
-                ),
-                "sender_address": _unprotect_database_text(
-                    row["sender_address_protected"]
-                ),
-                "received_at": _unprotect_database_text(
-                    row["received_at_protected"]
-                ),
-                "web_link": _unprotect_database_text(
-                    row["web_link_protected"]
-                ),
-                "is_read": bool(row["is_read"]),
-                "classification": row["classification"],
-                "attention_status": row["attention_status"],
-                "mailbox_status": row["mailbox_status"],
-                "created_at": row["created_at"],
-                "updated_at": row["updated_at"],
-            }
-        )
-
-    return pending_messages
+    return [
+        _pending_message_from_row(row)
+        for row in rows
+    ]
 
 
 def count_pending_messages() -> int:
@@ -301,7 +323,6 @@ def _update_attention_status(
     attention_status: str,
 ) -> bool:
     allowed_statuses = {
-        "PENDING",
         "MANAGED",
         "IGNORED",
     }
@@ -319,6 +340,7 @@ def _update_attention_status(
                 attention_status = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE message_key = ?
+              AND attention_status = 'PENDING'
             """,
             (
                 attention_status,

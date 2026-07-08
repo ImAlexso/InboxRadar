@@ -21,14 +21,19 @@ def main() -> None:
             DATABASE_FILE,
             connect,
             count_pending_messages,
+            get_pending_message,
             get_sync_state,
             get_tracked_message,
             initialize_database,
             list_pending_messages,
+            mark_message_ignored,
             mark_message_managed,
             set_sync_state,
         )
+        from .graph import DeltaPage
         from .message_processor import process_message_event
+        from .sync_engine import sync_once
+        from .windows_protection import build_message_key
 
         initialize_database()
 
@@ -180,6 +185,13 @@ def main() -> None:
             "Protected subject could not be restored.",
         )
 
+        pending_key = str(pending[0]["message_key"])
+
+        _require(
+            get_pending_message(pending_key) is not None,
+            "Pending message could not be loaded by key.",
+        )
+
         raw_database = DATABASE_FILE.read_bytes()
 
         forbidden_plaintext = (
@@ -196,15 +208,127 @@ def main() -> None:
             )
 
         _require(
-            mark_message_managed(
-                str(pending[0]["message_key"])
-            ),
+            mark_message_managed(pending_key),
             "Pending message could not be managed.",
         )
 
         _require(
             count_pending_messages() == 0,
             "Managed message remained pending.",
+        )
+
+        _require(
+            get_pending_message(pending_key) is None,
+            "Managed message can still be loaded as pending.",
+        )
+
+        _require(
+            not mark_message_ignored(pending_key),
+            "Managed message was incorrectly changed to ignored.",
+        )
+
+        managed_row = get_tracked_message(
+            "selftest-action-001"
+        )
+
+        _require(
+            managed_row is not None
+            and managed_row["attention_status"] == "MANAGED",
+            "Managed message changed final status.",
+        )
+
+        bridge_event = {
+            "id": "selftest-bridge-001",
+            "subject": "Action required - MVP bridge",
+            "receivedDateTime": "2026-07-07T13:00:00Z",
+            "from": {
+                "emailAddress": {
+                    "name": "Bridge Sender",
+                    "address": "bridge@example.com",
+                }
+            },
+            "isRead": False,
+            "webLink": "https://example.com/bridge",
+        }
+
+        class FakeGraphClient:
+            def follow_delta_link(
+                self,
+                url: str,
+            ) -> DeltaPage:
+                _require(
+                    url
+                    == "https://graph.microsoft.com/private-delta-token",
+                    "Sync engine used an unexpected delta link.",
+                )
+
+                return DeltaPage(
+                    messages=[bridge_event],
+                    next_link=None,
+                    delta_link=(
+                        "https://graph.microsoft.com/"
+                        "next-private-delta-token"
+                    ),
+                )
+
+        report = sync_once(FakeGraphClient())
+
+        _require(
+            report.mode == "DELTA",
+            "MVP bridge sync did not run in delta mode.",
+        )
+
+        _require(
+            len(report.events) == 1,
+            "MVP bridge sync returned an unexpected event count.",
+        )
+
+        processed_event = report.events[0]
+
+        expected_message_key = build_message_key(
+            "selftest-bridge-001"
+        )
+
+        _require(
+            processed_event.result
+            == "TRACKED_NEW_MESSAGE",
+            "MVP bridge message was not tracked.",
+        )
+
+        _require(
+            processed_event.message_key
+            == expected_message_key,
+            "Sync report did not expose the safe message key.",
+        )
+
+        _require(
+            processed_event.message_ref
+            == expected_message_key[:12],
+            "Sync report returned an unexpected safe reference.",
+        )
+
+        bridge_pending = get_pending_message(
+            expected_message_key
+        )
+
+        _require(
+            bridge_pending is not None,
+            "New sync event could not be loaded by message key.",
+        )
+
+        _require(
+            bridge_pending["subject"]
+            == "Action required - MVP bridge",
+            "MVP bridge pending message was not restored.",
+        )
+
+        _require(
+            get_sync_state("inbox_delta_link")
+            == (
+                "https://graph.microsoft.com/"
+                "next-private-delta-token"
+            ),
+            "Sync engine did not persist the final delta link.",
         )
 
         print(
