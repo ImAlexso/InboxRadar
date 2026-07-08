@@ -1,7 +1,7 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from PySide6.QtCore import Qt, QUrl, Slot
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import Qt, QUrl, Signal, Slot
+from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -20,6 +20,8 @@ from .pending_card import PendingCard
 class MainWindow(QMainWindow):
     """Main InboxRadar pending-message window."""
 
+    pending_count_changed = Signal(int)
+
     def __init__(
         self,
         application: ApplicationService,
@@ -27,6 +29,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self._application = application
+        self._close_to_tray_enabled = False
 
         self.setWindowTitle("InboxRadar")
         self.setMinimumSize(680, 400)
@@ -129,6 +132,29 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Listo")
 
         self.refresh_pending()
+
+    def set_close_to_tray_enabled(
+        self,
+        enabled: bool,
+    ) -> None:
+        self._close_to_tray_enabled = enabled
+
+    @Slot()
+    def show_from_tray(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def closeEvent(
+        self,
+        event: QCloseEvent,
+    ) -> None:
+        if self._close_to_tray_enabled:
+            event.ignore()
+            self.hide()
+            return
+
+        super().closeEvent(event)
 
     def _clear_cards(self) -> None:
         while self._cards_layout.count():
@@ -257,6 +283,10 @@ class MainWindow(QMainWindow):
             return
 
         self._update_summary(len(messages))
+
+        self.pending_count_changed.emit(
+            len(messages)
+        )
 
         if not messages:
             self._show_empty_state()
