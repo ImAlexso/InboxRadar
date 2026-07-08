@@ -74,8 +74,9 @@ def _handle_sync_started(
     window: MainWindow,
     tray: InboxRadarTrayIcon | None,
 ) -> None:
-    window.statusBar().showMessage(
-        "Sincronizando..."
+    window.set_sync_state(
+        "Sincronizando",
+        kind="syncing",
     )
 
     if tray is not None:
@@ -88,32 +89,24 @@ def _handle_sync_success(
     result: ApplicationSyncResult,
 ) -> None:
     window.refresh_pending()
-
-    new_count = len(
-        result.new_pending_keys
+    window.set_sync_state(
+        "Al día",
+        kind="ok",
     )
 
+    new_count = len(result.new_pending_keys)
+
     if new_count == 1:
-        message = (
-            "1 nuevo pendiente detectado"
+        window.show_feedback(
+            "1 nuevo pendiente detectado",
+            5000,
         )
 
     elif new_count > 1:
-        message = (
-            f"{new_count} nuevos "
-            "pendientes detectados"
+        window.show_feedback(
+            f"{new_count} nuevos pendientes detectados",
+            5000,
         )
-
-    elif result.pending_count == 1:
-        message = "Al día · 1 pendiente"
-
-    else:
-        message = (
-            f"Al día · "
-            f"{result.pending_count} pendientes"
-        )
-
-    window.statusBar().showMessage(message)
 
     if tray is not None:
         tray.set_pending_count(
@@ -152,14 +145,19 @@ def _handle_sync_failure(
     tray: InboxRadarTrayIcon | None,
     failure: SyncFailure,
 ) -> None:
-    window.statusBar().showMessage(
-        failure.user_message
+    status_text = _tray_failure_status(failure)
+
+    window.set_sync_state(
+        status_text,
+        kind="error",
+    )
+    window.show_feedback(
+        failure.user_message,
+        8000,
     )
 
     if tray is not None:
-        tray.set_status(
-            _tray_failure_status(failure)
-        )
+        tray.set_status(status_text)
 
 
 def main() -> int:
@@ -249,7 +247,7 @@ def main() -> int:
 
     alert_manager.status_message.connect(
         lambda message:
-        window.statusBar().showMessage(
+        window.show_feedback(
             message,
             4000,
         )

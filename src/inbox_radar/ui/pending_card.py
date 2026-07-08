@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
@@ -26,9 +26,7 @@ def _format_received_at(value: object) -> str:
             "+00:00",
         )
 
-        received = datetime.fromisoformat(
-            normalized
-        )
+        received = datetime.fromisoformat(normalized)
 
         if received.tzinfo is None:
             received = received.replace(
@@ -109,21 +107,17 @@ class PendingCard(QFrame):
         )
 
         subject_label = QLabel(subject)
-        subject_label.setObjectName(
-            "messageSubject"
-        )
+        subject_label.setObjectName("messageSubject")
         subject_label.setToolTip(subject)
 
         top_layout = QHBoxLayout()
         top_layout.setContentsMargins(0, 0, 0, 0)
-        top_layout.setSpacing(10)
+        top_layout.setSpacing(8)
         top_layout.addWidget(subject_label, 1)
 
         if not bool(message.get("is_read")):
-            unread_badge = QLabel("NO LEÍDO")
-            unread_badge.setObjectName(
-                "unreadBadge"
-            )
+            unread_badge = QLabel("●  No leído")
+            unread_badge.setObjectName("unreadBadge")
             top_layout.addWidget(unread_badge)
 
         meta_label = QLabel(
@@ -145,28 +139,25 @@ class PendingCard(QFrame):
             0,
             0,
         )
-        actions_layout.setSpacing(7)
+        actions_layout.setSpacing(5)
 
         if (
             message.get("mailbox_status")
             == "REMOVED_FROM_INBOX"
         ):
             mailbox_badge = QLabel(
-                "FUERA DEL INBOX"
+                "Fuera del Inbox"
             )
             mailbox_badge.setObjectName(
                 "mailboxBadge"
             )
-            actions_layout.addWidget(
-                mailbox_badge
-            )
+            actions_layout.addWidget(mailbox_badge)
 
         actions_layout.addStretch()
 
-        open_button = QPushButton(
-            "Abrir en Outlook"
-        )
+        open_button = QPushButton("Abrir")
         open_button.setObjectName("openButton")
+        open_button.setToolTip("Abrir en Outlook")
 
         ignored_button = QPushButton("Ignorar")
         ignored_button.setObjectName(
@@ -174,7 +165,7 @@ class PendingCard(QFrame):
         )
 
         managed_button = QPushButton(
-            "Gestionado"
+            "✓  Gestionado"
         )
         managed_button.setObjectName(
             "managedButton"
@@ -209,21 +200,18 @@ class PendingCard(QFrame):
 
         actions_layout.addWidget(open_button)
         actions_layout.addWidget(ignored_button)
-        actions_layout.addWidget(
-            managed_button
-        )
+        actions_layout.addWidget(managed_button)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(
-            18,
             14,
-            18,
+            10,
             14,
+            10,
         )
-        layout.setSpacing(8)
+        layout.setSpacing(5)
         layout.addLayout(top_layout)
         layout.addWidget(meta_label)
-        layout.addSpacing(3)
         layout.addLayout(actions_layout)
 
         self.setLayout(layout)
