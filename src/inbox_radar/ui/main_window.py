@@ -1,24 +1,24 @@
 ﻿from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl, Slot
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QHeaderView,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
-    QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
+    QMessageBox,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
 from ..application import ApplicationService
+from .pending_card import PendingCard
 
 
 class MainWindow(QMainWindow):
-    """Minimal pending-message window."""
+    """Main InboxRadar pending-message window."""
 
     def __init__(
         self,
@@ -29,120 +29,390 @@ class MainWindow(QMainWindow):
         self._application = application
 
         self.setWindowTitle("InboxRadar")
-        self.resize(900, 500)
+        self.setMinimumSize(680, 400)
+        self.resize(760, 480)
 
-        self._count_label = QLabel()
-
-        self._refresh_button = QPushButton(
-            "Actualizar"
-        )
-        self._refresh_button.clicked.connect(
-            self.refresh_pending
+        self._summary_label = QLabel()
+        self._summary_label.setObjectName(
+            "sectionSummary"
         )
 
-        self._table = QTableWidget(0, 3)
-        self._table.setHorizontalHeaderLabels(
-            [
-                "Asunto",
-                "Remitente",
-                "Fecha",
-            ]
-        )
+        self._cards_container = QWidget()
 
-        self._table.setEditTriggers(
-            QAbstractItemView.EditTrigger.NoEditTriggers
+        self._cards_layout = QVBoxLayout(
+            self._cards_container
         )
-        self._table.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectRows
-        )
-        self._table.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection
-        )
-        self._table.setAlternatingRowColors(True)
-
-        header = self._table.horizontalHeader()
-        header.setSectionResizeMode(
+        self._cards_layout.setContentsMargins(
             0,
-            QHeaderView.ResizeMode.Stretch,
+            0,
+            0,
+            0,
         )
-        header.setSectionResizeMode(
+        self._cards_layout.setSpacing(10)
+
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName(
+            "pendingScroll"
+        )
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(
+            QFrame.Shape.NoFrame
+        )
+        scroll_area.setWidget(
+            self._cards_container
+        )
+
+        brand_label = QLabel("InboxRadar")
+        brand_label.setObjectName(
+            "brandTitle"
+        )
+
+        privacy_badge = QLabel(
+            "LOCAL · PRIVADO"
+        )
+        privacy_badge.setObjectName(
+            "privacyBadge"
+        )
+
+        brand_layout = QHBoxLayout()
+        brand_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        brand_layout.addWidget(brand_label)
+        brand_layout.addStretch()
+        brand_layout.addWidget(
+            privacy_badge
+        )
+
+        section_title = QLabel("Pendientes")
+        section_title.setObjectName(
+            "sectionTitle"
+        )
+
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(
+            24,
+            20,
+            24,
+            16,
+        )
+        content_layout.setSpacing(0)
+
+        content_layout.addLayout(
+            brand_layout
+        )
+        content_layout.addSpacing(24)
+        content_layout.addWidget(
+            section_title
+        )
+        content_layout.addSpacing(3)
+        content_layout.addWidget(
+            self._summary_label
+        )
+        content_layout.addSpacing(16)
+        content_layout.addWidget(
+            scroll_area,
             1,
-            QHeaderView.ResizeMode.ResizeToContents,
         )
-        header.setSectionResizeMode(
-            2,
-            QHeaderView.ResizeMode.ResizeToContents,
-        )
-
-        title_label = QLabel("Pendientes")
-
-        title_font = title_label.font()
-        title_font.setPointSize(18)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
-
-        header_layout = QHBoxLayout()
-        header_layout.addWidget(title_label)
-        header_layout.addWidget(self._count_label)
-        header_layout.addStretch()
-        header_layout.addWidget(self._refresh_button)
-
-        layout = QVBoxLayout()
-        layout.addLayout(header_layout)
-        layout.addWidget(self._table)
 
         central_widget = QWidget()
-        central_widget.setLayout(layout)
+        central_widget.setLayout(
+            content_layout
+        )
 
         self.setCentralWidget(central_widget)
 
+        self.statusBar().setSizeGripEnabled(False)
+        self.statusBar().showMessage("Listo")
+
         self.refresh_pending()
 
-    def refresh_pending(self) -> None:
-        messages = self._application.list_pending()
+    def _clear_cards(self) -> None:
+        while self._cards_layout.count():
+            item = self._cards_layout.takeAt(0)
 
-        self._table.setRowCount(len(messages))
+            widget = item.widget()
 
-        for row_index, message in enumerate(messages):
-            message_key = str(
-                message["message_key"]
+            if widget is not None:
+                widget.deleteLater()
+
+    def _update_summary(
+        self,
+        count: int,
+    ) -> None:
+        if count == 0:
+            text = (
+                "No hay correos esperando "
+                "una decisión"
+            )
+        elif count == 1:
+            text = (
+                "1 correo esperando tu decisión"
+            )
+        else:
+            text = (
+                f"{count} correos esperando "
+                "tu decisión"
             )
 
-            subject_item = QTableWidgetItem(
-                str(message["subject"])
-            )
-            subject_item.setData(
-                Qt.ItemDataRole.UserRole,
-                message_key,
-            )
+        self._summary_label.setText(text)
 
-            sender = (
-                str(message["sender_name"])
-                or str(message["sender_address"])
-            )
-
-            sender_item = QTableWidgetItem(sender)
-
-            received_item = QTableWidgetItem(
-                str(message["received_at"])
-            )
-
-            self._table.setItem(
-                row_index,
-                0,
-                subject_item,
-            )
-            self._table.setItem(
-                row_index,
-                1,
-                sender_item,
-            )
-            self._table.setItem(
-                row_index,
-                2,
-                received_item,
-            )
-
-        self._count_label.setText(
-            f"({len(messages)})"
+    def _show_empty_state(self) -> None:
+        empty_state = QFrame()
+        empty_state.setObjectName(
+            "emptyState"
         )
+
+        title = QLabel("Todo al día")
+        title.setObjectName("emptyTitle")
+
+        text = QLabel(
+            "No hay correos pendientes "
+            "de decisión."
+        )
+        text.setObjectName("emptyText")
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(
+            24,
+            38,
+            24,
+            38,
+        )
+        layout.setSpacing(7)
+        layout.addWidget(
+            title,
+            alignment=(
+                Qt.AlignmentFlag.AlignHCenter
+            ),
+        )
+        layout.addWidget(
+            text,
+            alignment=(
+                Qt.AlignmentFlag.AlignHCenter
+            ),
+        )
+
+        empty_state.setLayout(layout)
+
+        self._cards_layout.addWidget(
+            empty_state
+        )
+        self._cards_layout.addStretch()
+
+    def _show_load_error(self) -> None:
+        error_state = QFrame()
+        error_state.setObjectName(
+            "emptyState"
+        )
+
+        title = QLabel(
+            "No se pudieron cargar "
+            "los pendientes"
+        )
+        title.setObjectName("emptyTitle")
+
+        text = QLabel(
+            "InboxRadar no ha podido leer "
+            "el estado local."
+        )
+        text.setObjectName("emptyText")
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(
+            24,
+            38,
+            24,
+            38,
+        )
+        layout.setSpacing(7)
+        layout.addWidget(title)
+        layout.addWidget(text)
+
+        error_state.setLayout(layout)
+
+        self._cards_layout.addWidget(
+            error_state
+        )
+        self._cards_layout.addStretch()
+
+    def refresh_pending(self) -> None:
+        self._clear_cards()
+
+        try:
+            messages = (
+                self._application.list_pending()
+            )
+        except Exception:
+            self._update_summary(0)
+            self._show_load_error()
+
+            self.statusBar().showMessage(
+                "Error al cargar los pendientes.",
+                5000,
+            )
+            return
+
+        self._update_summary(len(messages))
+
+        if not messages:
+            self._show_empty_state()
+            return
+
+        for message in messages:
+            card = PendingCard(message)
+
+            card.open_requested.connect(
+                self._open_message
+            )
+            card.managed_requested.connect(
+                self._mark_managed
+            )
+            card.ignored_requested.connect(
+                self._mark_ignored
+            )
+
+            self._cards_layout.addWidget(card)
+
+        self._cards_layout.addStretch()
+
+    @Slot(str)
+    def _open_message(
+        self,
+        message_key: str,
+    ) -> None:
+        try:
+            message = self._application.get_pending(
+                message_key
+            )
+        except Exception:
+            self.statusBar().showMessage(
+                "No se pudo cargar el correo.",
+                5000,
+            )
+            return
+
+        if message is None:
+            self.statusBar().showMessage(
+                "Ese correo ya no está pendiente.",
+                4000,
+            )
+            self.refresh_pending()
+            return
+
+        web_link = str(
+            message.get("web_link")
+            or ""
+        ).strip()
+
+        url = QUrl(web_link)
+
+        if (
+            not url.isValid()
+            or url.scheme().lower()
+            not in {"http", "https"}
+        ):
+            self.statusBar().showMessage(
+                "El correo no tiene "
+                "un enlace válido.",
+                5000,
+            )
+            return
+
+        if not QDesktopServices.openUrl(url):
+            self.statusBar().showMessage(
+                "No se pudo abrir el correo.",
+                5000,
+            )
+            return
+
+        self.statusBar().showMessage(
+            "Correo abierto en Outlook.",
+            3000,
+        )
+
+    @Slot(str)
+    def _mark_managed(
+        self,
+        message_key: str,
+    ) -> None:
+        try:
+            changed = (
+                self._application.mark_managed(
+                    message_key
+                )
+            )
+        except Exception:
+            self.statusBar().showMessage(
+                "No se pudo actualizar el correo.",
+                5000,
+            )
+            return
+
+        if changed:
+            self.statusBar().showMessage(
+                "Correo marcado como gestionado.",
+                3500,
+            )
+        else:
+            self.statusBar().showMessage(
+                "Ese correo ya no estaba pendiente.",
+                4000,
+            )
+
+        self.refresh_pending()
+
+    @Slot(str)
+    def _mark_ignored(
+        self,
+        message_key: str,
+    ) -> None:
+        answer = QMessageBox.question(
+            self,
+            "Ignorar correo",
+            (
+                "Este correo desaparecerá "
+                "de pendientes.\n\n"
+                "¿Quieres ignorarlo?"
+            ),
+            (
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+            ),
+            QMessageBox.StandardButton.No,
+        )
+
+        if (
+            answer
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+
+        try:
+            changed = (
+                self._application.mark_ignored(
+                    message_key
+                )
+            )
+        except Exception:
+            self.statusBar().showMessage(
+                "No se pudo actualizar el correo.",
+                5000,
+            )
+            return
+
+        if changed:
+            self.statusBar().showMessage(
+                "Correo ignorado.",
+                3500,
+            )
+        else:
+            self.statusBar().showMessage(
+                "Ese correo ya no estaba pendiente.",
+                4000,
+            )
+
+        self.refresh_pending()
