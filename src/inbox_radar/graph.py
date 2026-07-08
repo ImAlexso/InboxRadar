@@ -31,6 +31,9 @@ class GraphClient:
             }
         )
 
+    def close(self) -> None:
+        self._session.close()
+
     def _get(
         self,
         url: str,
