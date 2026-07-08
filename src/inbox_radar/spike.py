@@ -20,7 +20,11 @@ def run() -> None:
 
     print("SYNC_START")
 
-    report = sync_once(client)
+    try:
+        report = sync_once(client)
+
+    finally:
+        client.close()
 
     if report.mode == "BASELINE":
         print(

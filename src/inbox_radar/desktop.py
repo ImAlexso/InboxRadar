@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import sys
 
 from PySide6.QtWidgets import (
@@ -13,6 +14,10 @@ from .application import (
     ApplicationService,
     ApplicationSyncResult,
 )
+from .errors import (
+    ConfigurationError,
+    InboxRadarError,
+)
 from .single_instance import (
     SingleInstanceCoordinator,
     SingleInstanceError,
@@ -25,6 +30,44 @@ from .ui.app_icon import build_app_icon
 from .ui.main_window import MainWindow
 from .ui.theme import APP_STYLESHEET
 from .ui.tray_icon import InboxRadarTrayIcon
+
+
+def _startup_error_message(
+    error: Exception,
+) -> str:
+    if isinstance(error, ConfigurationError):
+        return (
+            "La configuración local de InboxRadar "
+            "no es válida.\n\n"
+            "Revisa el archivo .env y vuelve "
+            "a intentarlo."
+        )
+
+    if isinstance(error, sqlite3.Error):
+        return (
+            "No se pudo abrir el estado local "
+            "de InboxRadar.\n\n"
+            "Cierra cualquier otra instancia y "
+            "vuelve a intentarlo."
+        )
+
+    if isinstance(error, OSError):
+        return (
+            "No se pudo acceder al almacenamiento "
+            "seguro o a los archivos locales "
+            "de InboxRadar."
+        )
+
+    if isinstance(error, InboxRadarError):
+        return (
+            "InboxRadar no pudo completar "
+            "la inicialización."
+        )
+
+    return (
+        "Se produjo un error inesperado "
+        "al iniciar InboxRadar."
+    )
 
 
 def _handle_sync_started(
@@ -167,7 +210,19 @@ def main() -> int:
     if not is_primary_instance:
         return 0
 
-    application = ApplicationService()
+    try:
+        application = ApplicationService()
+
+    except Exception as error:
+        instance_coordinator.close()
+
+        QMessageBox.critical(
+            None,
+            "InboxRadar",
+            _startup_error_message(error),
+        )
+
+        return 1
 
     window = MainWindow(application)
     window.setWindowIcon(app_icon)
