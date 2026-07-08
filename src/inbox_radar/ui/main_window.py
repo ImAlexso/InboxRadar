@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QUrl, Signal, Slot
-from PySide6.QtGui import QCloseEvent, QDesktopServices
+from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -13,7 +13,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..application import ApplicationService
+from ..application import (
+    ApplicationService,
+    OpenPendingResult,
+)
 from .pending_card import PendingCard
 
 
@@ -315,17 +318,25 @@ class MainWindow(QMainWindow):
         message_key: str,
     ) -> None:
         try:
-            message = self._application.get_pending(
+            result = self._application.open_pending(
                 message_key
             )
+
         except Exception:
             self.statusBar().showMessage(
-                "No se pudo cargar el correo.",
+                "No se pudo abrir el correo.",
                 5000,
             )
             return
 
-        if message is None:
+        if result is OpenPendingResult.OPENED:
+            self.statusBar().showMessage(
+                "Correo abierto en Outlook.",
+                3000,
+            )
+            return
+
+        if result is OpenPendingResult.NOT_PENDING:
             self.statusBar().showMessage(
                 "Ese correo ya no está pendiente.",
                 4000,
@@ -333,35 +344,27 @@ class MainWindow(QMainWindow):
             self.refresh_pending()
             return
 
-        web_link = str(
-            message.get("web_link")
-            or ""
-        ).strip()
-
-        url = QUrl(web_link)
-
-        if (
-            not url.isValid()
-            or url.scheme().lower()
-            not in {"http", "https"}
-        ):
-            self.statusBar().showMessage(
+        if result is OpenPendingResult.INVALID_LINK:
+            message = (
                 "El correo no tiene "
-                "un enlace válido.",
-                5000,
+                "un enlace válido."
             )
-            return
 
-        if not QDesktopServices.openUrl(url):
-            self.statusBar().showMessage(
-                "No se pudo abrir el correo.",
-                5000,
+        elif (
+            result
+            is OpenPendingResult.BROWSER_UNAVAILABLE
+        ):
+            message = (
+                "El navegador configurado "
+                "no está disponible."
             )
-            return
+
+        else:
+            message = "No se pudo abrir el correo."
 
         self.statusBar().showMessage(
-            "Correo abierto en Outlook.",
-            3000,
+            message,
+            5000,
         )
 
     @Slot(str)

@@ -8,16 +8,15 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import (
-    QDesktopServices,
-)
-from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QApplication,
     QWidget,
 )
 
-from .application import ApplicationService
+from .application import (
+    ApplicationService,
+    OpenPendingResult,
+)
 from .ui.alert_popup import AlertPopup
 
 
@@ -140,49 +139,47 @@ class AlertManager(QObject):
         message_key: str,
     ) -> None:
         try:
-            message = self._application.get_pending(
+            result = self._application.open_pending(
                 message_key
             )
+
         except Exception:
-            self.status_message.emit(
-                "No se pudo cargar el correo."
-            )
-            return
-
-        if message is None:
-            self.pending_changed.emit()
-            self._finish_current()
-            return
-
-        web_link = str(
-            message.get("web_link")
-            or ""
-        ).strip()
-
-        url = QUrl(web_link)
-
-        if (
-            not url.isValid()
-            or url.scheme().lower()
-            not in {"http", "https"}
-        ):
-            self.status_message.emit(
-                "El correo no tiene "
-                "un enlace válido."
-            )
-            return
-
-        if not QDesktopServices.openUrl(url):
             self.status_message.emit(
                 "No se pudo abrir el correo."
             )
             return
 
-        self.status_message.emit(
-            "Correo abierto en Outlook."
-        )
+        if result is OpenPendingResult.OPENED:
+            self.status_message.emit(
+                "Correo abierto en Outlook."
+            )
+            self._finish_current()
+            return
 
-        self._finish_current()
+        if result is OpenPendingResult.NOT_PENDING:
+            self.pending_changed.emit()
+            self._finish_current()
+            return
+
+        if result is OpenPendingResult.INVALID_LINK:
+            message = (
+                "El correo no tiene "
+                "un enlace válido."
+            )
+
+        elif (
+            result
+            is OpenPendingResult.BROWSER_UNAVAILABLE
+        ):
+            message = (
+                "El navegador configurado "
+                "no está disponible."
+            )
+
+        else:
+            message = "No se pudo abrir el correo."
+
+        self.status_message.emit(message)
 
     @Slot(str)
     def _mark_managed(
