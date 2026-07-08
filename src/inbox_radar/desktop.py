@@ -4,6 +4,7 @@ import sys
 
 from PySide6.QtWidgets import (
     QApplication,
+    QMessageBox,
     QSystemTrayIcon,
 )
 
@@ -11,6 +12,10 @@ from .alert_manager import AlertManager
 from .application import (
     ApplicationService,
     ApplicationSyncResult,
+)
+from .single_instance import (
+    SingleInstanceCoordinator,
+    SingleInstanceError,
 )
 from .sync_controller import (
     SyncController,
@@ -133,10 +138,43 @@ def main() -> int:
 
     qt_application.setWindowIcon(app_icon)
 
+    instance_coordinator = (
+        SingleInstanceCoordinator(
+            parent=qt_application,
+        )
+    )
+
+    try:
+        is_primary_instance = (
+            instance_coordinator
+            .acquire_or_notify()
+        )
+
+    except SingleInstanceError:
+        QMessageBox.critical(
+            None,
+            "InboxRadar",
+            (
+                "No se pudo iniciar InboxRadar "
+                "de forma segura.\n\n"
+                "Cierra cualquier instancia abierta "
+                "y vuelve a intentarlo."
+            ),
+        )
+
+        return 1
+
+    if not is_primary_instance:
+        return 0
+
     application = ApplicationService()
 
     window = MainWindow(application)
     window.setWindowIcon(app_icon)
+
+    instance_coordinator.activation_requested.connect(
+        window.show_from_tray
+    )
 
     sync_controller = SyncController(
         application,
@@ -236,6 +274,10 @@ def main() -> int:
 
     qt_application.aboutToQuit.connect(
         sync_controller.stop
+    )
+
+    qt_application.aboutToQuit.connect(
+        instance_coordinator.close
     )
 
     window.show()
