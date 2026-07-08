@@ -188,3 +188,83 @@ QStatusBar {
     font-size: 11px;
 }
 """
+
+APP_STYLESHEET += """
+QWidget#alertWindow {
+    background-color: transparent;
+}
+
+QFrame#alertPopup {
+    background-color: #161d27;
+    border: 1px solid #344154;
+    border-radius: 13px;
+}
+
+QFrame#alertPopup QLabel {
+    background-color: transparent;
+    border: none;
+}
+
+QLabel#alertEyebrow {
+    color: #8fa7ff;
+    font-size: 9px;
+    font-weight: 700;
+}
+
+QLabel#alertSubject {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 650;
+}
+
+QLabel#alertSender {
+    color: #9ba6b5;
+    font-size: 12px;
+}
+
+QPushButton#dismissAlertButton {
+    min-height: 0;
+    padding: 0;
+    background-color: transparent;
+    color: #8792a2;
+    border: none;
+    font-size: 18px;
+    font-weight: 400;
+}
+
+QPushButton#dismissAlertButton:hover {
+    background-color: #252e3a;
+    color: #ffffff;
+}
+
+QPushButton#alertOpenButton {
+    background-color: #222b37;
+    color: #e8edf3;
+    border: 1px solid #374352;
+}
+
+QPushButton#alertOpenButton:hover {
+    background-color: #2c3643;
+}
+
+QPushButton#alertIgnoredButton {
+    background-color: transparent;
+    color: #aeb7c3;
+    border: 1px solid transparent;
+}
+
+QPushButton#alertIgnoredButton:hover {
+    background-color: #2b2025;
+    color: #e6a0a8;
+}
+
+QPushButton#alertManagedButton {
+    background-color: #4e6df2;
+    color: #ffffff;
+    border: 1px solid #4e6df2;
+}
+
+QPushButton#alertManagedButton:hover {
+    background-color: #5d7afb;
+}
+"""

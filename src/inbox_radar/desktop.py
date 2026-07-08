@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import sys
 
@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon,
 )
 
+from .alert_manager import AlertManager
 from .application import (
     ApplicationService,
     ApplicationSyncResult,
@@ -143,6 +144,24 @@ def main() -> int:
         parent=window,
     )
 
+    alert_manager = AlertManager(
+        application,
+        window,
+        parent=window,
+    )
+
+    alert_manager.pending_changed.connect(
+        window.refresh_pending
+    )
+
+    alert_manager.status_message.connect(
+        lambda message:
+        window.statusBar().showMessage(
+            message,
+            4000,
+        )
+    )
+
     tray: InboxRadarTrayIcon | None = None
 
     if QSystemTrayIcon.isSystemTrayAvailable():
@@ -190,12 +209,21 @@ def main() -> int:
         )
     )
 
-    sync_controller.sync_succeeded.connect(
-        lambda result: _handle_sync_success(
+    def handle_sync_success(
+        result: ApplicationSyncResult,
+    ) -> None:
+        _handle_sync_success(
             window,
             tray,
             result,
         )
+
+        alert_manager.enqueue(
+            result.new_pending_keys
+        )
+
+    sync_controller.sync_succeeded.connect(
+        handle_sync_success
     )
 
     sync_controller.sync_failed.connect(
